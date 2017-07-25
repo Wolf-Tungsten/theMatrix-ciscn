@@ -55,7 +55,7 @@ body {
   z-index: 3;
 }
 
-@media screen and (max-width: 950px){
+@media screen and (max-width: 1000px){
 #audiotag{
 
   position:relative;
@@ -71,7 +71,7 @@ body {
 
 }
 
-@media screen and (min-width: 950px){
+@media screen and (min-width: 1000px){
   #audiotag{
     position: fixed;
     background: #C4C4C4;
