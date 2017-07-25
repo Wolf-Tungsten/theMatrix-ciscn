@@ -1,6 +1,8 @@
 import React, { Component } from 'react';
 import logo from './img/The Matrix System.svg';
 import './App.css';
+import back from './img/back.svg'
+import forward from './img/forward.svg'
 
 
 function parseJson(w)//将json字符串转换成json对象
@@ -14,31 +16,42 @@ class App extends Component {
         this.state={
             wifiSniff:true,
             fakeAP:false,
-            attack:false
+            attack:false,
+            fetchFile:false
         };
         this.handleSniff = this.handleSniff.bind(this);
         this.handleFakeAP = this.handleFakeAP.bind(this);
         this.handleAttack = this.handleAttack.bind(this);
-
+        this.handleFetchFile = this.handleFetchFile.bind(this);
     }
 
    handleSniff(){
         this.setState({wifiSniff:true});
         this.setState({fakeAP:false});
-       this.setState({attack:false});
-        console.log(this.state);
+        this.setState({attack:false});
+        this.setState({fetchFile:false});
+
    }
 
    handleFakeAP(){
        this.setState({wifiSniff:false});
        this.setState({fakeAP:true});
        this.setState({attack:false});
+       this.setState({fetchFile:false});
    }
 
    handleAttack(){
        this.setState({wifiSniff:false});
        this.setState({fakeAP:false});
        this.setState({attack:true});
+       this.setState({fetchFile:false});
+   }
+
+   handleFetchFile(){
+       this.setState({wifiSniff:false});
+       this.setState({fakeAP:false});
+       this.setState({attack:false});
+       this.setState({fetchFile:true});
    }
 
   render() {
@@ -52,11 +65,12 @@ class App extends Component {
          <LightButton text="Wi-Fi嗅探" handleClick={this.handleSniff} active={this.state.wifiSniff}/>
          <LightButton text="钓鱼AP" handleClick={this.handleFakeAP} active={this.state.fakeAP}/>
                  <LightButton text="渗透" handleClick={this.handleAttack} active={this.state.attack}/>
-                 <LightButton text="取证" handleClick={this.handleAttack} active={this.state.attack}/>
+                 <LightButton text="取证" handleClick={this.handleFetchFile} active={this.state.fetchFile}/>
              </div>
              <div id="right-index" style={{width:'100%',overflow:'scroll'}}>
              {this.state.wifiSniff?<WifiSniffFace/>:<div/>}
              {this.state.fakeAP?<FakeAPFace/>:<div/>}
+             {this.state.fetchFile?<FetchFileFace/>:<div/>}
              </div>
          </div>
      </div>
@@ -466,6 +480,160 @@ class FakeAPFace extends Component{
     }
 }
 
+class FetchFileFace extends Component{
+    constructor(props){
+        super(props);
+        this.state={
+            currentPath:'/home/root/',
+            historyPath:[],
+            backHistoryPath:[],
+            fileList:{
+                0:{
+                    name:'file1',
+                    isDirectory:false,
+                    path:'/home/root/',
+                    download:'',
+                    size:1000
+                },
+                1:{
+                    name:'file2',
+                    isDirectory:false,
+                    path:'/home/root/',
+                    download:'',
+                    size:1000
+                },
+                2:{
+                    name:'download',
+                    isDirectory:false,
+                    path:'/home/root/download/',
+                    download:'',
+                    size:1000
+                }
 
+            }
+
+        };
+        this.handleBack = this.handleBack.bind(this);
+        this.handleForward = this.handleForward.bind(this);
+        this.handlePath = this.handlePath.bind(this);
+        this.handleGo = this.handleGo.bind(this);
+        this.refresh = this.refresh.bind(this);
+    }
+
+    //使用当前path去向服务器获取当前的filelist
+    refresh(){
+
+    }
+
+    handleBack(){
+        let historyPath = this.state.historyPath;
+        let backHistoryPath = this.state.backHistoryPath;
+        let currentPath = this.state.currentPath;
+
+        if(historyPath.length>0){
+            backHistoryPath.push(currentPath);
+            currentPath=historyPath.pop();
+            this.setState({currentPath:currentPath});
+            this.setState({historyPath:historyPath});
+            this.setState({backHistoryPath:backHistoryPath});
+        }
+
+    }
+
+    handleForward(){
+        let historyPath = this.state.historyPath;
+        let backHistoryPath = this.state.backHistoryPath;
+        let currentPath = this.state.currentPath;
+
+        if(backHistoryPath.length>0){
+            historyPath.push(currentPath);
+            currentPath=backHistoryPath.pop();
+            this.setState({currentPath:currentPath});
+            this.setState({historyPath:historyPath});
+            this.setState({backHistoryPath:backHistoryPath});
+        }
+    }
+
+    handlePath(newPath){
+        this.setState({currentPath:newPath});
+    }
+
+    handleGo(){
+        this.refresh();
+    }
+
+    render(){
+        let elements=[];
+        for (let i in this.state.fileList){
+            elements.push(<FileItem file={this.state.fileList[i]} directoryHandle={this.handlePath}/>);
+        }
+
+        return(<div id="fetch-file-panel">
+                    <div id="fetch-file-head">
+                        <div id="button-group">
+                            <div className="back-forward"><img src={back} alt="后退"/></div>
+                            <div className="back-forward"><img src={forward} alt="前进"/></div>
+                        </div>
+                        <TextBox style={{width:'60%'}} bind={this.handlePath}/>
+                        <Button style={{backgroundColor:'#F2F2F2',marginLeft:'15px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
+                                handleClick={this.handleGo} text="前往"/>
+                    </div>
+                    <div id="fetch-file-box">
+                        {elements}
+                    </div>
+                </div>);
+    }
+
+
+
+}
+
+//文件条目对象
+//参数1：file对象
+//参数2：directoryHandle文件夹跳转回调函数
+class FileItem extends Component{
+
+    constructor(props){
+        super(props);
+        this.handleClick = this.handleClick.bind(this);
+    }
+
+
+    handleClick(){
+        if(!this.props.file.isDirectory) {
+            console.log('开始下载', this.props.file.name);
+            window.open(this.props.download);
+        }
+        else{
+            this.props.directoryHandle(this.props.file.path);
+        }
+
+    }
+    render(){
+        let size=parseInt(this.props.file.size);
+        if(size<1024){
+            size=size+'bytes';
+        }
+        else if(size >= 1024 && size < 1024*1024){
+            size=size/1024 + 'KB';
+        }
+        else if(size >= 1024*1024 && size < 1024*1024*1024){
+            size=size/1024/1024 + 'MB';
+        }
+        else if(size >= 1024*1024*1024 && size < 1024*1024*1024*1024){
+            size=size/1024/1024/1024 + 'GB';
+        }
+        else if(size >= 1024*1024*1024*1024){
+            size='别想了，太大了';
+        }
+
+        return(
+            <div className="file-item" handleClick={this.handleClick}>
+                <span className="file-name">{this.props.file.name}</span>
+                <span className="file-size">{size}</span>
+            </div>
+        )
+    }
+}
 
 export default App;
