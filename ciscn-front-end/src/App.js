@@ -3,7 +3,10 @@ import logo from './img/The Matrix System.svg';
 import './App.css';
 
 
-
+function parseJson(w)//将json字符串转换成json对象
+{
+    return eval("("+w+")");
+}
 
 class App extends Component {
     constructor(props){
@@ -49,9 +52,11 @@ class App extends Component {
          <LightButton text="Wi-Fi嗅探" handleClick={this.handleSniff} active={this.state.wifiSniff}/>
          <LightButton text="钓鱼AP" handleClick={this.handleFakeAP} active={this.state.fakeAP}/>
                  <LightButton text="渗透" handleClick={this.handleAttack} active={this.state.attack}/>
+                 <LightButton text="取证" handleClick={this.handleAttack} active={this.state.attack}/>
              </div>
-             <div style={{width:'100%'}}>
+             <div id="right-index" style={{width:'100%',overflow:'scroll'}}>
              {this.state.wifiSniff?<WifiSniffFace/>:<div/>}
+             {this.state.fakeAP?<FakeAPFace/>:<div/>}
              </div>
          </div>
      </div>
@@ -162,31 +167,131 @@ class WifiSniffFace extends Component{
         super(props);
         this.state={
             aps:{0:{
-                ssid:'seu-wlan',
-                rssi:-12,
-                safemode:'WPA2'
-            },
-                1:{
-                    ssid:'cmcc',
-                    rssi:-100,
-                    safemode:'WPA2'
-                }},
+                ssid:'正在获取',
+                pwr:-50,
+                safemode:'---'
+            }},
             isAPGet:false,
-            choose:-1
+            choose:-1,
+            password:''
         }
         this.handleChoose = this.handleChoose.bind(this);
+        this.wshandle = this.wshandle.bind(this);
+        this.startSniff = this.startSniff.bind(this);
+        this.bindData = this.bindData.bind(this);
+        this.connect = this.connect.bind(this);
+        this.disconnect = this.disconnect.bind(this);
+        this.handlePassword = this.handlePassword.bind(this);
+    }
+
+    wshandle(event){
+        console.log('收到ws数据');
+        let recvStr=event.data;//输入参数的data成员变量包含了发送过来的数据
+        if(recvStr[0]=='{')//第一个字符是左括号 默认此时是json字符串
+        {
+            let pkg=parseJson(recvStr);
+            let PkgType=pkg.Type;
+            let PkgContent=pkg.Content;
+            console.log("type="+PkgType+";Cont="+PkgContent);
+            console.log(PkgContent);
+            if(PkgType === 'WifiScanResult'){
+                this.bindData(PkgContent);
+                clearInterval(this.sniffTimer);
+            }
+        }
+    }
+
+    componentDidMount() {
+        this.ws = new WebSocket('ws://119.29.5.72:8088/soc');//创建websocket连接
+        this.ws.onmessage = this.wshandle;//当服务器发送给客户端数据的时候 客户端的响应函数
+        this.sniffTimer = setInterval(this.startSniff,3000);
 
     }
 
+    componentWillUnmount() {
+        this.ws.close();
+    }
+    bindData(obj){
+        this.setState({aps:obj});
+    }
+
+    startSniff(){
+        console.log('等待获取嗅探结果');
+        let content={//这里填写的东西没有实际作用 只是为了填充content域
+            'action':'start'
+        };
+
+        let data = {
+            'Type':'StartWifiScan',//类型是StartFakeAp
+            'Content':content
+        };
+        console.log(this.ws.readyState);
+        if (this.ws.readyState === 1 && !this.state.isAPGet) {
+
+            this.setState({isAPGet:true});
+            this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+
+        }
+    }
+
+    //绑定选择指定wifi控件的方法
     handleChoose(index){
         this.setState({choose:index});
         console.log('以下热点被选择：',this.state.aps[index]);
     }
 
+    //绑定到密码控件的方法
+    handlePassword(password){
+        this.setState({password:password});
+    }
+
+    //点击连接按钮调用的方法
+    connect(){
+        console.log('连接指定Wi-Fi');
+        let content={//这里填写的东西没有实际作用 只是为了填充content域
+            'ssid':this.state.aps[this.state.choose].ssid,
+            'password':this.state.password,
+            'action':'connect'
+        };
+
+        let data = {
+            'Type':'ConnectWifiAp',//类型是StartFakeAp
+            'Content':content
+        };
+        console.log(this.ws.readyState);
+        if (this.ws.readyState === 1) {
+
+            this.setState({isAPGet:true});
+            this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+
+        }
+    }
+    //点击断开按钮调用的方法
+    disconnect(){
+        console.log('连接指定Wi-Fi');
+        let content={//这里填写的东西没有实际作用 只是为了填充content域
+            'ssid':this.state.aps[this.state.choose].ssid,
+            'password':this.state.password,
+            'action':'disconnect'
+        };
+
+        let data = {
+            'Type':'ConnectWifiAp',//类型是StartFakeAp
+            'Content':content
+        };
+        console.log(this.ws.readyState);
+        if (this.ws.readyState === 1) {
+
+            this.setState({isAPGet:true});
+            this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+
+        }
+    }
+
     render(){
         let wifi_list=new Array();
         for (let i in this.state.aps){
-            let element=<WifiStatueBar handleChoose= {this.handleChoose} ap={this.state.aps[i]} index={i} key={i}/>;
+            let element=<WifiStatueBar handleChoose={this.handleChoose} ap={this.state.aps[i]} index={i} key={i}/>;
             wifi_list.push(element);
         }
 
@@ -200,11 +305,13 @@ class WifiSniffFace extends Component{
                 </div>
                 <p id="chooseTitle">被选中的热点</p>
                 <div id="chooseBox">
-                    {this.state.choose!=-1?<WifiStatueBar ap={this.state.aps[this.state.choose]}/>:<div></div>}
+                    {this.state.choose!=-1?<WifiStatueBar handleChoose={this.handleChoose} ap={this.state.aps[this.state.choose]}/>:<div></div>}
+
                 </div>
+                <div className="set-fake-ap-item"><p style={{color:'#F2F2F2'}}>密码</p><TextBox bind={this.handlePassword}/></div>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <Button style={{width:'60%'}} text="连接"/>
-                    <Button style={{width:'40%',backgroundColor:'#C4C4C4',color:'#333333'}} text="断开"/>
+                <Button style={{width:'60%'}} text="连接" handleClick={this.connect}/>
+                    <Button style={{width:'40%',backgroundColor:'#C4C4C4',color:'#333333'}} handleClick={this.disconnect} text="断开"/>
                 </div>
             </div>
         )
@@ -228,16 +335,16 @@ class WifiStatueBar extends Component{
 
         return(
             <div onClick={this.handleClick} style={{width:'90%',display:'flex',alignItems:'center',justifyContent:'center'}}>
-            <p style={{width:'50%',overflow:'hidden',zIndex:4,fontFamily:'NotoSansHans-Bold',color:'#4F4F4F'}}>{this.props.ap.ssid} [{this.props.ap.safemode}]</p>
+            <p style={{width:'50%',overflow:'hidden',zIndex:4,fontFamily:'NotoSansHans-Bold',color:'#4F4F4F'}}>{this.props.ap.ssid} [{this.props.ap.enctype}]</p>
             <div className="wifi-status-bar-back">
-            <div className="wifi-status-bar-front" style={{width:(-this.props.ap.rssi)+'%'}}>
+            <div className="wifi-status-bar-front" style={{width:(100+parseInt(this.props.ap.pwr))+'%'}}>
             </div>
             </div>
             </div>);
     }
 }
 
-class FakeAP extends Component{
+class FakeAPFace extends Component{
     constructor(props){
         super(props);
         this.state = {
@@ -245,7 +352,7 @@ class FakeAP extends Component{
             password:'',
             channel:0,
             safemode:'',
-            isWorking:false,
+            isWorking:true,
             connect:0,
             data:0
         }
@@ -254,7 +361,41 @@ class FakeAP extends Component{
         this.handlePassword = this.handlePassword.bind(this);
         this.handleSafeMode = this.handleSafeMode.bind(this);
         this.handleClick = this.handleClick.bind(this);
+
+        this.wshandle = this.wshandle.bind(this);
+
     }
+
+
+    wshandle(event){
+        console.log('收到ws数据');
+        let recvStr=event.data;//输入参数的data成员变量包含了发送过来的数据
+        if(recvStr[0]=='{')//第一个字符是左括号 默认此时是json字符串
+        {
+            let pkg=parseJson(recvStr);
+            let PkgType=pkg.Type;
+            let PkgContent=pkg.Content;
+            console.log("type="+PkgType+";Cont="+PkgContent);
+            console.log(PkgContent);
+            if(PkgType === 'WifiScanResult'){
+                this.bindData(PkgContent);
+                clearInterval(this.sniffTimer);
+            }
+        }
+    }
+
+    componentDidMount() {
+        this.ws = new WebSocket('ws://119.29.5.72:8088/soc');//创建websocket连接
+        this.ws.onmessage = this.wshandle;//当服务器发送给客户端数据的时候 客户端的响应函数
+        this.sniffTimer = setInterval(this.startSniff,3000);
+
+    }
+
+    componentWillUnmount() {
+        this.ws.close();
+    }
+
+
 
     handleSSID(ssid){
         this.setState({ssid:ssid});
@@ -277,37 +418,46 @@ class FakeAP extends Component{
     }
 
     handleClick(){
-
+        let ssidInfo={//这里将用户填写的内容获取下来放到ssidInfo中
+            'ssid':this.state.ssid,
+            'password':this.state.password,
+            'key_mgmt':this.state.safemode,
+            'channel':this.state.channel,
+            'action':'start'
+        };
+        console.log('开启钓鱼AP',this.state.safemode);
+        let data = {
+            'Type':'StartFakeAp',//类型是StartFakeAp
+            'Content':ssidInfo
+        };
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
     }
 
     render(){
         return(
             <div>
 
-                <div>
-                    <span>SSID</span>
-                    <TextBox bind={this.handleSSID}/>
-                    <span>信道</span>
-                    <TextBox bind={this.handleChannel}/>
-                    <span>安全模式</span>
-                    <Dropdown index={['WPA','WPA2','WEP','不加密']} handleChoose={this.handleSafeMode}/>
-                    <span>密钥(如果加密)</span>
-                    <TextBox bind={this.handlePassword}/>
-                    <Button text="开启钓鱼AP"/>
+                <div id="set-fake-ap">
+                    <div className="set-fake-ap-item"><p>SSID</p><TextBox bind={this.handleSSID}/></div>
+                    <div className="set-fake-ap-item"><p>信道</p><TextBox bind={this.handleChannel}/></div>
+                    <div className="set-fake-ap-item"><p>安全模式</p><Dropdown index={['WPA','WPA2','WEP','不加密']} handleChoose={this.handleSafeMode}/></div>
+                    <div className="set-fake-ap-item"><p>密钥(如果加密)</p><TextBox bind={this.handlePassword}/></div>
+                    <Button handleClick={this.handleClick} style={{width:'60%'}} text="开启钓鱼AP"/>
                 </div>
-                <div>
-                    <span>钓鱼AP工作状态</span>
-                    {this.state.isWorking?<p>正在工作</p>:<p>未开启</p>}
+
+                <div id="fake-ap-status">
+                    <span>工作状态</span>
+                    {this.state.isWorking?<p className="on">正在工作</p>:<p className="off">未开启</p>}
                 </div>
-                <div>
-                    <div>
+                <div id="fake-ap-data">
+                    <div className="fake-ap-data-border">
                         <p>已有</p>
-                        <p>{this.state.connect}</p>
+                        <p className="number">{this.state.connect}</p>
                         <p>连接</p>
                     </div>
-                    <div>
+                    <div className="fake-ap-data-border">
                         <p>捕获</p>
-                        <p>{this.state.data}</p>
+                        <p className="number">{this.state.data}</p>
                         <p>MB数据</p>
                     </div>
                 </div>
