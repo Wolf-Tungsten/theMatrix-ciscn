@@ -4,7 +4,7 @@ import './App.css';
 import back from './img/back.svg'
 import forward from './img/forward.svg'
 
-var wsAddress='ws://119.29.5.72:8071/soc';
+var wsAddress='ws://119.29.5.72:8091/soc';
 
 function parseJson(w)//将json字符串转换成json对象
 {
@@ -523,6 +523,8 @@ class FetchFileFace extends Component{
         this.handleSearch = this.handleSearch.bind(this);
         this.handleDownload = this.handleDownload.bind(this);
         this.handleDirectory = this.handleDirectory.bind(this);
+        this.handleLast = this.handleLast.bind(this);
+        this.getPwd=this.getPwd.bind(this);
     }
 
 
@@ -534,14 +536,22 @@ class FetchFileFace extends Component{
             let pkg=parseJson(recvStr);
             let PkgType=pkg.Type;
             let PkgContent=pkg.Content;
-            console.log("type="+PkgType+";Cont="+PkgContent);
-            console.log(PkgContent);
+            console.log("type",PkgType);
+            console.log("content",PkgContent);
             if(PkgType === 'GetPathFilesResult' || PkgType === 'SearchFileResult'){
                 this.setState({fileList:PkgContent});
             }
             if(PkgType === 'DownloadFileResult'){
                 console.log('解析到地址，正在开始下载');
-                window.open(PkgContent.url);
+                window.open(PkgContent.downloadUrl);
+            }
+            if(PkgType === 'CdResult'){
+                this.setState({currentPath:PkgContent.path});
+                this.handleGo();
+            }
+            if(PkgType === 'PwdResult'){
+                this.setState({currentPath:PkgContent.path});
+                this.handleGo();
             }
         }
     }
@@ -549,6 +559,19 @@ class FetchFileFace extends Component{
     componentDidMount() {
         this.ws = new WebSocket(wsAddress);//创建websocket连接
         this.ws.onmessage = this.wshandle;//当服务器发送给客户端数据的时候 客户端的响应函数
+        setTimeout(this.getPwd,1000);
+    }
+
+    getPwd(){
+        let content={
+            'action':'pwd'
+        };
+        let data={
+            'Type':'Pwd',
+            'Content':content
+        };
+        this.ws.send(JSON.stringify(data));
+        console.log('获取当前目录路径');
     }
 
     componentWillUnmount() {
@@ -604,7 +627,8 @@ class FetchFileFace extends Component{
         this.setState({currentPath:newPath});
     }
 
-    handleDirectory(newPath){
+    handleDirectory(Path,dirname){
+        let newPath =Path+'\\'+dirname;
         console.log('前往路径',newPath);
         let content={
             'filepath':newPath
@@ -646,11 +670,22 @@ class FetchFileFace extends Component{
         this.ws.send(JSON.stringify(data));
     }
 
+    handleLast(){
+        let content={
+            'path':'..'
+        };
+        let data={
+            'Type':'cd',
+            'Content':content
+        };
+        this.ws.send(JSON.stringify(data));
+    }
+
     handleDownload(filename,path){
         console.log('正在获取下载地址');
         let content={
-            'filename':filename,
-            'path':path
+            'filenamepath':path+'\\'+filename
+
         };
         let data={
             'Type':'DownloadFile',
@@ -670,6 +705,8 @@ class FetchFileFace extends Component{
                         <div id="button-group">
                             <div onClick={this.handleBack} className="back-forward"><img src={back} alt="后退"/></div>
                             <div onClick={this.handleForward} className="back-forward"><img src={forward} alt="前进"/></div>
+                            <Button style={{backgroundColor:'#F2F2F2',marginRight:'10px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
+                                    handleClick={this.handleSearch} text="上层"/>
                         </div>
                         <TextBox style={{width:'60%'}} bind={this.handlePath} value={this.state.currentPath}/>
                         <Button style={{backgroundColor:'#F2F2F2',marginLeft:'10px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
@@ -705,12 +742,12 @@ class FileItem extends Component{
             this.props.handleDownload(this.props.file.name,this.props.file.path);
         }
         else{
-            this.props.directoryHandle(this.props.file.path);
+            this.props.directoryHandle(this.props.file.path,this.props.file.name);
         }
 
     }
     render(){
-        let size=parseInt(this.props.file.size);
+        let size=parseInt(this.props.file['size']);
         let backgroundColor=(this.props.file.isDirectory==='true'?'#E8D8A5':'#F4F4F4');
         if(size<1024){
             size=size+'bytes';
@@ -730,7 +767,7 @@ class FileItem extends Component{
 
         return(
             <div className="file-item"  style={{backgroundColor:backgroundColor}}  onClick={this.handleClick}>
-                <span className="file-name">{this.props.file.name}</span>
+                <span className="file-name">{this.props.file['name']}</span>
                 <span className="file-size">{size}</span>
             </div>
         )
