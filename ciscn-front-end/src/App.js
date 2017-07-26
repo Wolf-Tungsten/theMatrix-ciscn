@@ -4,6 +4,7 @@ import './App.css';
 import back from './img/back.svg'
 import forward from './img/forward.svg'
 
+var wsAddress='ws://119.29.5.72:8071/soc';
 
 function parseJson(w)//将json字符串转换成json对象
 {
@@ -126,11 +127,12 @@ class Dropdown extends Component{
 //自定义文本框组件
 //参数1：bind 数据绑定，该函数会在文本框内容被改变时调用
 //参数2：style 覆盖默认style行为
+//参数3：默认值
 class TextBox extends Component{
     constructor(props){
         super(props);
         this.state={
-            value:''
+            value:this.props.value
         }
         this.handleChange = this.handleChange.bind(this);
     }
@@ -141,7 +143,7 @@ class TextBox extends Component{
     }
 
     render(){
-        return(<input type="text" value={this.state.value} className="textbox" onChange={this.handleChange}></input>)
+        return(<input type="text" value={this.props.value} className="textbox" onChange={this.handleChange}></input>)
     }
 }
 
@@ -216,7 +218,7 @@ class WifiSniffFace extends Component{
     }
 
     componentDidMount() {
-        this.ws = new WebSocket('ws://119.29.5.72:8088/soc');//创建websocket连接
+        this.ws = new WebSocket(wsAddress);//创建websocket连接
         this.ws.onmessage = this.wshandle;//当服务器发送给客户端数据的时候 客户端的响应函数
         this.sniffTimer = setInterval(this.startSniff,3000);
 
@@ -322,7 +324,7 @@ class WifiSniffFace extends Component{
                     {this.state.choose!=-1?<WifiStatueBar handleChoose={this.handleChoose} ap={this.state.aps[this.state.choose]}/>:<div></div>}
 
                 </div>
-                <div className="set-fake-ap-item"><p style={{color:'#F2F2F2'}}>密码</p><TextBox bind={this.handlePassword}/></div>
+                <div style={{justifyContent:'center'}} className="set-fake-ap-item"><p style={{color:'#F2F2F2'}}>密码</p><TextBox bind={this.handlePassword}/></div>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <Button style={{width:'60%'}} text="连接" handleClick={this.connect}/>
                     <Button style={{width:'40%',backgroundColor:'#C4C4C4',color:'#333333'}} handleClick={this.disconnect} text="断开"/>
@@ -367,8 +369,8 @@ class FakeAPFace extends Component{
             channel:0,
             safemode:'',
             isWorking:true,
-            connect:0,
-            data:0
+            connect:25,
+            data:34355
         }
         this.handleSSID = this.handleSSID.bind(this);
         this.handleChannel = this.handleChannel.bind(this);
@@ -393,15 +395,13 @@ class FakeAPFace extends Component{
             console.log(PkgContent);
             if(PkgType === 'WifiScanResult'){
                 this.bindData(PkgContent);
-                clearInterval(this.sniffTimer);
             }
         }
     }
 
     componentDidMount() {
-        this.ws = new WebSocket('ws://119.29.5.72:8088/soc');//创建websocket连接
+        this.ws = new WebSocket(wsAddress);//创建websocket连接
         this.ws.onmessage = this.wshandle;//当服务器发送给客户端数据的时候 客户端的响应函数
-        this.sniffTimer = setInterval(this.startSniff,3000);
 
     }
 
@@ -487,27 +487,28 @@ class FetchFileFace extends Component{
             currentPath:'/home/root/',
             historyPath:[],
             backHistoryPath:[],
+            tempPath:'',
             fileList:{
                 0:{
                     name:'file1',
                     isDirectory:false,
                     path:'/home/root/',
                     download:'',
-                    size:1000
+                    size:43452345
                 },
                 1:{
                     name:'file2',
                     isDirectory:false,
                     path:'/home/root/',
                     download:'',
-                    size:1000
+                    size:1343434
                 },
                 2:{
                     name:'download',
-                    isDirectory:false,
+                    isDirectory:true,
                     path:'/home/root/download/',
                     download:'',
-                    size:1000
+                    size:1663566433
                 }
 
             }
@@ -518,65 +519,163 @@ class FetchFileFace extends Component{
         this.handlePath = this.handlePath.bind(this);
         this.handleGo = this.handleGo.bind(this);
         this.refresh = this.refresh.bind(this);
+        this.wshandle = this.wshandle.bind(this);
+        this.handleSearch = this.handleSearch.bind(this);
+        this.handleDownload = this.handleDownload.bind(this);
+        this.handleDirectory = this.handleDirectory.bind(this);
     }
+
+
+    wshandle(event){
+        console.log('收到ws数据');
+        let recvStr=event.data;//输入参数的data成员变量包含了发送过来的数据
+        if(recvStr[0]=='{')//第一个字符是左括号 默认此时是json字符串
+        {
+            let pkg=parseJson(recvStr);
+            let PkgType=pkg.Type;
+            let PkgContent=pkg.Content;
+            console.log("type="+PkgType+";Cont="+PkgContent);
+            console.log(PkgContent);
+            if(PkgType === 'GetPathFilesResult' || PkgType === 'SearchFileResult'){
+                this.setState({fileList:PkgContent});
+            }
+            if(PkgType === 'DownloadFileResult'){
+                console.log('解析到地址，正在开始下载');
+                window.open(PkgContent.url);
+            }
+        }
+    }
+
+    componentDidMount() {
+        this.ws = new WebSocket(wsAddress);//创建websocket连接
+        this.ws.onmessage = this.wshandle;//当服务器发送给客户端数据的时候 客户端的响应函数
+    }
+
+    componentWillUnmount() {
+        this.ws.close();
+    }
+
 
     //使用当前path去向服务器获取当前的filelist
     refresh(){
-
+        let content={
+            'filepath':this.state.currentPath
+        };
+        let data={
+            'Type':'GetPathFiles',
+            'Content':content
+        };
+        this.ws.send(JSON.stringify(data));
     }
 
     handleBack(){
         let historyPath = this.state.historyPath;
         let backHistoryPath = this.state.backHistoryPath;
         let currentPath = this.state.currentPath;
-
+        console.log(currentPath);
         if(historyPath.length>0){
             backHistoryPath.push(currentPath);
             currentPath=historyPath.pop();
+            console.log('前往路径',currentPath);
             this.setState({currentPath:currentPath});
             this.setState({historyPath:historyPath});
             this.setState({backHistoryPath:backHistoryPath});
         }
-
+        this.refresh();
     }
 
     handleForward(){
         let historyPath = this.state.historyPath;
         let backHistoryPath = this.state.backHistoryPath;
         let currentPath = this.state.currentPath;
-
+        console.log(currentPath);
         if(backHistoryPath.length>0){
             historyPath.push(currentPath);
             currentPath=backHistoryPath.pop();
+            console.log('前往路径',currentPath);
             this.setState({currentPath:currentPath});
             this.setState({historyPath:historyPath});
             this.setState({backHistoryPath:backHistoryPath});
         }
+        this.refresh();
     }
 
     handlePath(newPath){
         this.setState({currentPath:newPath});
     }
 
+    handleDirectory(newPath){
+        console.log('前往路径',newPath);
+        let content={
+            'filepath':newPath
+        };
+        let data={
+            'Type':'GetPathFiles',
+            'Content':content
+        };
+        this.ws.send(JSON.stringify(data));
+        let history=this.state.historyPath;
+        history.push(this.state.currentPath);
+        this.setState({historyPath:history});
+        this.setState({currentPath:newPath});
+    }
+
     handleGo(){
-        this.refresh();
+        console.log('前往路径',this.state.currentPath);
+        let content={
+            'filepath':this.state.currentPath
+        };
+        let data={
+            'Type':'GetPathFiles',
+            'Content':content
+        };
+        this.ws.send(JSON.stringify(data));
+        let history=this.state.historyPath;
+        history.push(this.state.currentPath);
+        this.setState({historyPath:history});
+    }
+
+    handleSearch(){
+        let content={
+            'searchname':this.state.currentPath
+        };
+        let data={
+            'Type':'SearchFile',
+            'Content':content
+        };
+        this.ws.send(JSON.stringify(data));
+    }
+
+    handleDownload(filename,path){
+        console.log('正在获取下载地址');
+        let content={
+            'filename':filename,
+            'path':path
+        };
+        let data={
+            'Type':'DownloadFile',
+            'Content':content
+        };
+        this.ws.send(JSON.stringify(data));
     }
 
     render(){
         let elements=[];
         for (let i in this.state.fileList){
-            elements.push(<FileItem file={this.state.fileList[i]} directoryHandle={this.handlePath}/>);
+            elements.push(<FileItem handleDownload={this.handleDownload} file={this.state.fileList[i]} directoryHandle={this.handleDirectory}/>);
         }
 
         return(<div id="fetch-file-panel">
                     <div id="fetch-file-head">
                         <div id="button-group">
-                            <div className="back-forward"><img src={back} alt="后退"/></div>
-                            <div className="back-forward"><img src={forward} alt="前进"/></div>
+                            <div onClick={this.handleBack} className="back-forward"><img src={back} alt="后退"/></div>
+                            <div onClick={this.handleForward} className="back-forward"><img src={forward} alt="前进"/></div>
                         </div>
-                        <TextBox style={{width:'60%'}} bind={this.handlePath}/>
-                        <Button style={{backgroundColor:'#F2F2F2',marginLeft:'15px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
+                        <TextBox style={{width:'60%'}} bind={this.handlePath} value={this.state.currentPath}/>
+                        <Button style={{backgroundColor:'#F2F2F2',marginLeft:'10px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
                                 handleClick={this.handleGo} text="前往"/>
+                        <Button style={{backgroundColor:'#F2F2F2',marginRight:'10px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
+                                handleClick={this.handleSearch} text="搜索"/>
                     </div>
                     <div id="fetch-file-box">
                         {elements}
@@ -600,9 +699,10 @@ class FileItem extends Component{
 
 
     handleClick(){
-        if(!this.props.file.isDirectory) {
+        console.log('文件项目被点击',this.props.file);
+        if(this.props.file.isDirectory === 'false') {
             console.log('开始下载', this.props.file.name);
-            window.open(this.props.download);
+            this.props.handleDownload(this.props.file.name,this.props.file.path);
         }
         else{
             this.props.directoryHandle(this.props.file.path);
@@ -611,24 +711,25 @@ class FileItem extends Component{
     }
     render(){
         let size=parseInt(this.props.file.size);
+        let backgroundColor=(this.props.file.isDirectory==='true'?'#E8D8A5':'#F4F4F4');
         if(size<1024){
             size=size+'bytes';
         }
         else if(size >= 1024 && size < 1024*1024){
-            size=size/1024 + 'KB';
+            size=parseInt(size/1024) + 'KB';
         }
         else if(size >= 1024*1024 && size < 1024*1024*1024){
-            size=size/1024/1024 + 'MB';
+            size=parseInt(size/1024/1024) + 'MB';
         }
         else if(size >= 1024*1024*1024 && size < 1024*1024*1024*1024){
-            size=size/1024/1024/1024 + 'GB';
+            size=parseInt(size/1024/1024/1024) + 'GB';
         }
         else if(size >= 1024*1024*1024*1024){
             size='别想了，太大了';
         }
 
         return(
-            <div className="file-item" handleClick={this.handleClick}>
+            <div className="file-item"  style={{backgroundColor:backgroundColor}}  onClick={this.handleClick}>
                 <span className="file-name">{this.props.file.name}</span>
                 <span className="file-size">{size}</span>
             </div>
